@@ -96,6 +96,42 @@ de paneo de Fase E (`calcular_ganancias`, `_PANEO_CODIGO`, envío a
 TDAbleton) — sigue siendo el paneo real del montaje, independiente de este
 canal.
 
+## Filtro de formantes vocal a timbre (Fase F, parte 1 — 2026-08-26)
+
+`relay_callbacks.py` ahora también lee el `vocal` de `/voz/vocal` para
+mantener un formante objetivo `(F1, F2)` en `rumbos_estado["formante"]`
+(`calcular_actualizacion()`, tabla `FORMANTES_DEFAULT` — espejo de
+`DEFAULT_VOWELS` en `voz_rumbos.py` — o `vocales_ramon.json` real si
+`cargar_formantes()` lo encuentra junto a `config.json`). Sin vocal
+clasificada (`vocal == ""`) se mantiene el último formante, no corta a
+silencio. Motor puro, probado sin TD/Ableton (ver
+`test_relay_callbacks.py`).
+
+**Parte 2 resuelta (2026-08-26):** EQ Eight agregado a mano por MCP en
+`1-Vital`/`2-Vital` (índice 1 de la cadena, después de Vital), bandas 1 y
+2 puestas en modo Bell, índices reales de parámetro confirmados con
+`get_device_parameters` (`FORMANTE_DEVICE_INDEX = 1`,
+`FORMANTE_PARAM_FREQ = {1: (6, 11), 2: (16, 21)}` — banda 1/2, canal A/B).
+El parámetro Frequency de EQ Eight es 0.0-1.0, no Hz — la curva se
+calibró en vivo contra el dispositivo real (10Hz/469Hz/22000Hz en
+t=0.0/0.5/1.0, ver `hz_a_normalizado()` y `docs/BITACORA_SETUP.md`) en
+vez de asumir una fórmula de memoria. Ganancia de las dos bandas sigue en
+0dB (a propósito, sin efecto audible todavía) — afinar Ganancia/Resonancia
+por oído queda para Hafo/Ramón, no es una decisión técnica.
+
+**Parte 3 resuelta (2026-08-26):** disparo real conectado — `TouchDesigner_patch/scripts/relay_callbacks.py`
+retransferido al `/project1/relay/callbacks` en vivo de TD (estaba
+desincronizado del archivo), `inicializar()` corrido, `ableton_activo`
+confirmado `True`. Verificado end-to-end **sin ninguna escritura manual**:
+`voz_rumbos.py --file <clip> --osc 127.0.0.1:7000` con dos vocales
+(sintéticas, de una sola vocal sostenida, para tener un punto de lectura
+inequívoco) movió solo el EQ Eight real vía OSC → TD → relay → Ableton —
+'a' (F1=700Hz/F2=1300Hz) y ɨ (F1=350Hz/F2=1500Hz), los dos leídos en
+pantalla exactos. La cadena probada es la misma que usaría el canto real
+de Ramón; solo cambia la fuente de audio (ver `docs/BITACORA_SETUP.md`
+para el detalle y por qué no se usó el canto real para este punto de
+prueba específico).
+
 ## Nota para Resolume (Esteban)
 
 1. Preferences → OSC → activar **OSC Input**, puerto **7002** (o el que

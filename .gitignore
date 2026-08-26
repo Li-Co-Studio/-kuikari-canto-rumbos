@@ -32,3 +32,7 @@ __pycache__/
 # Sistema
 .DS_Store
 Thumbs.db
+
+# Bitácora interna de incidentes (seguridad/privacidad/proveedores) — nunca
+# se publica al jurado. Ver la nota dentro del archivo mismo.
+docs/BITACORA_LOCAL_no_publicar.md

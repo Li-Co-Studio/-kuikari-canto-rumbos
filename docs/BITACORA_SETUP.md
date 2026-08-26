@@ -930,3 +930,222 @@ configurabilidad no pedida.
 - Consecuencia narrativa/dossier de restaurar el rumbo (v3 ya lo había
   retirado del discurso en los capítulos II/IV/VIII) — pregunta abierta
   entre Hafo y Fable, no resuelta en esta sesión, no tocada aquí.
+
+## Fase F, parte 1 — motor de formantes vocal a timbre, sin Ableton conectado — 2026-08-26
+
+Pedido de Hafo: arrancar Fase F (filtro de formantes) usando `clase` como
+insumo, sin esperar a Fase A — el filtro de formantes lee la voz del
+cantante (vía `vocales_ramon.json` / `DEFAULT_VOWELS`), no la afinación de
+xaweri/kanari (Fase A), son cosas distintas.
+
+**Antes de tocar código:** esta parte no usó Ableton conectado todavía
+(detalle interno aparte, fuera de este documento) — el EQ Eight y los
+índices reales de parámetro quedaron para la parte 2.
+
+**Decisión de arquitectura (con Hafo, antes de escribir código):**
+- Dispositivo: EQ Eight (stock, 2 bandas Bell en F1/F2) en vez de un
+  filtro DSP nuevo — mismo patrón de bajo costo que ya probó Fase E
+  (parámetros vía `/shell/runCode` a `PANEO_THROTTLE_HZ=20` sin problema).
+  Las alternativas más ligeras del brief (wavetable, voicing, banco de
+  muestras) quedan anotadas para si el EQ pesa en vivo, pero no se
+  necesitaron para esta primera parte.
+- Tracks objetivo: `1-Vital`/`2-Vital` (índices 0 y 1) — se dedujeron del
+  mismo orden de tracks que ya confirmó Fase E en vivo (`TRACKS_FUENTE =
+  [2]` es `"3-Canto_RAMON..."`), no de una suposición nueva.
+- El EQ Eight **todavía no existe** en el set real — Hafo lo confirmó. Sin
+  Ableton conectado esta parte, no se pudo agregar ni leer índices de
+  parámetro reales todavía (ver parte 2).
+
+**Qué se hizo (`relay_callbacks.py`, mismo patrón que Fase E parte 1 —
+motor puro antes de tocar Ableton):**
+- `FORMANTES_DEFAULT` (espejo de `DEFAULT_VOWELS`) y `cargar_formantes()`,
+  que lee `vocales_ramon.json` junto a `config.json` si existe (mismo
+  formato que produce `voz_rumbos.py --calibrate`), si no usa el default.
+- `calcular_actualizacion()` gana un parámetro opcional `formantes`: en
+  `/voz/vocal`, además de la energía por rumbo, actualiza
+  `estado["formante"]` a `(F1, F2)` de la vocal. Sin clasificación
+  (`vocal == ""`) mantiene el último formante en vez de cortar a silencio.
+  Sigue siendo pura — se puede probar sin `me`/`op`/TD, igual que
+  `calcular_ganancias`.
+- `TRACKS_FORMANTE = [0, 1]`, `FORMANTE_DEVICE_INDEX = None`,
+  `FORMANTE_PARAM_FREQ = {1: None, 2: None}`, `_FORMANTE_CODIGO` (plantilla
+  del `/shell/runCode`, mismo estilo que `_PANEO_CODIGO`). `tick()` solo
+  manda algo de esto si `FORMANTE_DEVICE_INDEX` deja de ser `None` — hasta
+  entonces, no hace nada, a propósito.
+- `docs/OSC_SPEC.md` documenta el motor y deja anotado el pendiente de la
+  parte 2 explícitamente (qué falta y por qué).
+
+**Verificación real, no solo mensaje de éxito:**
+- `test_relay_callbacks.py` corrido completo → **las 9 pruebas de Fase E
+  siguen pasando exactamente igual** + 6 pruebas nuevas de Fase F, todas
+  verdes (lookup de formante por vocal contra la tabla, formante que se
+  mantiene sin clasificación, `cargar_formantes()` sin archivo real, código
+  del EQ compila, `tick()` no manda nada mientras `FORMANTE_DEVICE_INDEX`
+  sea `None`).
+- Las pruebas de formante que comparan valores usan `calcular_actualizacion()`
+  directo con una tabla explícita, no `inicializar()` leyendo el
+  `vocales_ramon.json` real — así no se rompen el día que Ramón calibre de
+  verdad (mismo cuidado que ya se tuvo con el acoplamiento a `config.json`
+  real en las pruebas existentes, pero evitado aquí a propósito).
+
+### Pendiente (actualizado)
+
+- **Fase F, parte 2:** con Ableton abierto, agregar el EQ Eight a mano (o
+  revisar si conviene que lo haga Claude por MCP una vez resuelto el
+  hallazgo de arriba) en `1-Vital`/`2-Vital`, leer los índices reales de
+  parámetro de Frecuencia con `get_device_parameters`, fijar
+  `FORMANTE_DEVICE_INDEX`/`FORMANTE_PARAM_FREQ`, y verificar en vivo con
+  voz real (mismo nivel de prueba que Fase E: no solo mensaje de éxito).
+- (Se mantienen sin cambios desde la entrada anterior: IPs reales de
+  Esteban/Carlos, calibración de vocales de Ramón, decisión sobre renombrar
+  `voz_rumbos.py`, Fase A/C bloqueadas del lado de Hafo, prueba de
+  rendimiento larga del paneo, señal viva de B, asignación real de
+  `--rumbos`, consecuencia narrativa del rumbo restaurado.)
+
+## Fase F, parte 2 — EQ Eight real, control confirmado en vivo — 2026-08-26 (cont.)
+
+**Bug real encontrado y resuelto — Remote Script desactualizado:** con
+Ableton abierto, `get_device_parameters` fallaba con
+`Unknown command: get_device_parameters` — `get_remote_script_info`
+confirmó `script_version: "legacy"` contra `expected_version: "1.7.0"`.
+Causa: dos carpetas de Remote Script distintas en
+`Documents\Ableton\User Library\Remote Scripts\` (`AbletonMCP_Remote_Script`,
+nombre viejo, y `AbletonMCP`, nombre nuevo — cambiaron el nombre de
+carpeta entre versiones), más copias legacy en
+`Preferences\User Remote Scripts\` de Live 12.1.11 y 12.2.1. El dropdown
+de Control Surface en Ableton tenía seleccionada la entrada vieja.
+Solución: `uvx --from ableton-mcp ableton-mcp-install-script` (instala
+1.7.0 en la carpeta nueva), reseleccionar específicamente **"AbletonMCP"**
+(sin sufijo) en Preferences → Link/Tempo/MIDI → Control Surface, **y**
+reiniciar Claude Code (la conexión MCP de la sesión no se refresca sola
+con que Ableton reinicie). Verificado con `get_remote_script_info`
+devolviendo `up_to_date: true` antes de seguir.
+
+**EQ Eight agregado y confirmado (no adivinado):**
+- `load_instrument_or_effect` con `query:AudioFx#EQ%20Eight` en las
+  tracks 0 y 1 (`1-Vital`, `2-Vital`) — MIDI tracks, así que el EQ quedó
+  en el índice 1 de la cadena (después del plugin Vital), confirmado con
+  `get_track_info` en las dos.
+- Bandas 1 y 2 puestas en modo Bell (tipo 3) a mano en los dos canales
+  (A/B) — el default de un EQ Eight recién cargado no trae Bell en todas,
+  hacía falta fijarlo para que tenga sentido como pico resonante de
+  formante.
+- **El parámetro Frequency es 0.0-1.0, no Hz** (dato que no estaba
+  documentado en ningún lado que se pudo encontrar, ni de memoria ni en
+  el repo de `ableton-mcp`). Se calibró en vivo contra el dispositivo
+  real en vez de asumir una fórmula: se pusieron 3 puntos de prueba
+  (bandas 1/2/3, t=0.0/0.5/1.0) y Hafo leyó los Hz reales en pantalla —
+  **10Hz, 469Hz, 22000Hz**. La curva `freq = fmin·(fmax/fmin)^t` con
+  fmin=10, fmax=22000 predice 469.04Hz en t=0.5 — coincide con el valor
+  leído, confirma la curva con los tres puntos, no solo dos.
+- Índices de parámetro confirmados con `get_device_parameters`:
+  banda 1 = "1 Frequency A"/"1 Frequency B" (índices 6, 11), banda 2 =
+  "2 Frequency A"/"2 Frequency B" (índices 16, 21) — EQ Eight siempre
+  separa canal A/B aunque el modo sea Stereo, así que `relay_callbacks.py`
+  escribe los dos por banda para no desincronizar canales.
+- Ganancia de las dos bandas se dejó en 0dB (default) a propósito — no es
+  una decisión técnica, es afinación por oído que le toca a Hafo/Ramón
+  una vez que lo escuchen funcionando. Mientras siga en 0dB, el filtro no
+  tiene efecto audible aunque la frecuencia sí se mueva correctamente.
+
+**`relay_callbacks.py` actualizado:** `FORMANTE_DEVICE_INDEX = 1`,
+`FORMANTE_PARAM_FREQ = {1: (6, 11), 2: (16, 21)}`, nueva función
+`hz_a_normalizado()` con la curva calibrada, `_FORMANTE_CODIGO` reescrito
+para convertir Hz→normalizado en Python antes de mandar el `runCode` (no
+manda Hz crudo, que hubiera apuntado el filtro a la frecuencia
+equivocada).
+
+**Verificación end-to-end real (no solo mensaje de éxito):**
+- `test_relay_callbacks.py` completo → 17 pruebas, todas verdes (las 9 de
+  Fase E y las de Fase F parte 1 sin cambios de comportamiento + pruebas
+  nuevas: índices confirmados, `hz_a_normalizado()` contra los tres puntos
+  medidos a mano, código del EQ compila con los valores reales).
+- Verificación en vivo aparte de las pruebas automatizadas: se calculó
+  con el código real qué normalizado le toca a la vocal 'e' (F1=450Hz,
+  F2=1900Hz), se escribió en el EQ Eight real de `1-Vital`, y Hafo leyó
+  en pantalla **450Hz** y **1.90kHz** — exactos. Cadena completa
+  verificada: vocal → F1/F2 → normalizado → parámetro real → Hz mostrado
+  en Ableton, con los números exactos esperados en cada eslabón (mismo
+  nivel de prueba que Fase E con el paneo).
+- Las dos tracks se dejaron en un estado final consistente: vocal 'a'
+  (F1=700Hz, F2=1300Hz), canales A y B sincronizados, banda tipo Bell,
+  ganancia en 0dB.
+
+### Pendiente (actualizado)
+
+- Afinar Ganancia y Resonancia de las bandas 1/2 por oído (Hafo/Ramón) —
+  con Ganancia en 0dB el filtro no se escucha todavía, aunque la
+  frecuencia ya responde correcto a la vocal.
+- Decidir si las otras tracks (`4-VOZ INTRO2-03`, `5-Audio`) necesitan su
+  propio EQ Eight de formantes más adelante, o si Fase F se queda solo en
+  el acorde de Vital.
+- (Se mantienen sin cambios: IPs reales de Esteban/Carlos, calibración de
+  vocales de Ramón, decisión sobre renombrar `voz_rumbos.py`, Fase A/C
+  bloqueadas del lado de Hafo, prueba de rendimiento larga del paneo,
+  señal viva de B, asignación real de `--rumbos`, consecuencia narrativa
+  del rumbo restaurado.)
+
+## Fase F, parte 3 — disparo real conectado, sin escritura manual — 2026-08-26 (cont.)
+
+Pedido de Hafo: sustituir la escritura manual de prueba (`set_device_parameter`
+directo) por la cadena real completa `voz_rumbos.py` → OSC → TD → relay →
+Ableton, y volver a verificar los mismos dos puntos (F1/F2 esperado contra
+lo que lee el dispositivo) pero disparados por voz real, no por mí.
+
+**TD estaba desincronizado de los archivos:** `/project1/relay/callbacks`
+en vivo no traía nada de Fase F (verificado por hash/marcador antes de
+tocar nada, mismo cuidado que Fase E parte 3). Se retransfirió el
+`relay_callbacks.py` completo por base64 (mismo método que Fase E, por
+las comillas triples de `_PANEO_CODIGO`/`_FORMANTE_CODIGO`), se confirmó
+sin errores con `get_td_node_errors`, y se corrió `inicializar()` en vivo
+— `ableton_activo: True`, timeline (`time.play`) ya corriendo. Se revisó
+también `/project1/oscin2_callbacks` (el dispatcher del hub, puerto 7000
+confirmado activo): reenvía sin cambios a `relay/callbacks` y
+`telar_visual/callbacks`, como ya se sabía de antes — no hizo falta
+tocarlo.
+
+**Verificación real, dos vocales, cadena completa sin intervención
+manual:** en vez de usar el canto real de Ramón (difícil de acotar a un
+momento exacto de una sola vocal sostenida para leer en pantalla,
+porque `--file` manda todo el OSC de golpe, no a tiempo real), se
+generaron dos clips sintéticos de una sola vocal cada uno (mismo método
+que ya usa `voz_rumbos_test.py`: portadora de 110Hz + componentes F1/F2),
+elegidos por clasificar limpio contra el propio clasificador del script
+antes de usarlos ('a': 122/130 frames; ɨ '+': 124/126 frames — 'i' salió
+sucio con este método de síntesis, no se usó).
+
+- `python voz_rumbos.py --file test_fase_f_a.wav --osc 127.0.0.1:7000`
+  (vocal 'a', F1=700Hz/F2=1300Hz esperado) → leído en Ableton por
+  `get_device_parameters` (0.552024 ≈ 0.5519 esperado) y confirmado por
+  Hafo en pantalla: **700Hz y 1300Hz exactos**.
+- `python voz_rumbos.py --file test_fase_f_ix.wav --osc 127.0.0.1:7000`
+  (vocal ɨ, F1=350Hz/F2=1500Hz esperado) → confirmado por Hafo en
+  pantalla: **350Hz y 1500Hz exactos**.
+
+Ninguna de las dos veces se llamó `set_device_parameter` a mano — el EQ
+Eight se movió solo, disparado por el análisis real de audio del script
+sin tocar, viajando por OSC real hasta Ableton. Cadena completa
+verificada con voz (sintética, no la de Ramón) real, no con datos
+escritos a mano — mismo nivel de exigencia que Fase E.
+
+**Nota sobre "voz real" vs. el canto de Ramón:** esta verificación usó
+audio sintético de una sola vocal, no el canto real de Ramón, porque el
+objetivo era un punto de prueba exacto y legible (una vocal sostenida,
+Hz esperado sin ambigüedad) — con el canto real, que cambia de vocal
+constantemente y se manda todo de golpe en modo `--file`, no hay forma
+de "atrapar" un instante específico en pantalla para comparar. La cadena
+que se probó es exactamente la misma que usaría el canto real (mismo
+script, mismo OSC, mismo relay, mismo Ableton) — lo único distinto es la
+fuente de audio. Si Hafo quiere además una pasada de sanidad con el
+canto real de Ramón (sin verificación punto a punto, solo confirmar que
+no truena), avisar y se corre aparte.
+
+### Pendiente (actualizado)
+
+- (Se mantienen sin cambios: afinar Ganancia/Resonancia por oído —
+  responsabilidad de Hafo/Ramón, no técnica —, decidir si otras tracks
+  necesitan su propio EQ de formantes, IPs reales de Esteban/Carlos,
+  calibración de vocales de Ramón, decisión sobre renombrar
+  `voz_rumbos.py`, Fase A/C bloqueadas del lado de Hafo, prueba de
+  rendimiento larga del paneo, señal viva de B, asignación real de
+  `--rumbos`, consecuencia narrativa del rumbo restaurado.)

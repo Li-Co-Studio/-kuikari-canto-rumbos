@@ -4,6 +4,13 @@
 # el motor de paneo cuadrafónico /paneo/* hacia Ableton (TDAbleton)
 # (ver docs/OSC_SPEC.md para la tabla completa de direcciones).
 #
+# Fase F (2026-08-26): motor de formantes vocal->timbre (vocal->F1/F2, ver
+# FORMANTES_DEFAULT/cargar_formantes). Parte 2: EQ Eight real agregado a
+# 1-Vital/2-Vital (índice 1, banda 1/2 en Bell) vía MCP con Ableton
+# abierto; índices de parámetro e índice de dispositivo confirmados en
+# vivo con get_device_parameters, no adivinados — ver
+# FORMANTE_DEVICE_INDEX/FORMANTE_PARAM_FREQ y docs/BITACORA_SETUP.md.
+#
 # Decisión de implementación: los derivados se calculan aquí en Python
 # (más fácil de probar sin TD abierto — ver smoke test 4 / verificacion.py)
 # en vez de una red de CHOPs (Lag/Trigger/Math). Si Hafo prefiere la vía
@@ -27,6 +34,7 @@ ESTADO_INICIAL = {
     "f0_norm": 0.0,
     "energia": {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0},
     "fila": 0,
+    "formante": None,  # (F1, F2) de la última vocal clasificada, o None
 }
 
 # ---- Paneo cuadrafónico (Fase E) ----
@@ -62,6 +70,73 @@ PANEO_INICIAL = {
                            # calcula offline en analisis_canto.py) — ver bitácora.
     "manual_angulo": None,
 }
+
+# ---- Filtro de formantes vocal a timbre (Fase F — 2026-08-26) ----
+# Motor puro (lookup vocal->F1/F2) y throttle, mismo patrón que Fase E parte 1
+# (calcular_ganancias) antes de tocar Ableton.
+
+FORMANTES_DEFAULT = {
+    "a": (700, 1300),
+    "e": (450, 1900),
+    "i": (280, 2250),
+    "+": (350, 1500),
+    "u": (310, 800),
+}  # espejo de DEFAULT_VOWELS en voz_rumbos.py — provisional hasta que
+   # exista vocales_ramon.json real de Ramón
+
+TRACKS_FORMANTE = [0, 1]  # 1-Vital, 2-Vital — mismo orden de tracks que
+                           # confirmó Fase E (TRACKS_FUENTE=[2] es "3-Canto_RAMON...")
+
+# EQ Eight agregado a mano por MCP (Ableton abierto, 2026-08-26) en el
+# índice 1 de la cadena de dispositivos (después del Vital) en las dos
+# tracks — confirmado con get_track_info/get_device_parameters, no
+# asumido. Banda 1 = F1, banda 2 = F2, las dos puestas en modo Bell (tipo
+# 3) a mano; cada banda expone Frecuencia por canal A y B (EQ Eight
+# siempre separa A/B aunque el modo sea Stereo), así que se escriben las
+# dos por banda para que no queden desincronizados los canales.
+FORMANTE_DEVICE_INDEX = 1
+FORMANTE_PARAM_FREQ = {
+    1: (6, 11),    # "1 Frequency A", "1 Frequency B"
+    2: (16, 21),   # "2 Frequency A", "2 Frequency B"
+}
+
+# El parámetro Frequency de EQ Eight es 0.0-1.0, NO Hz directo. Curva
+# calibrada en vivo contra el dispositivo real (no de memoria/documentación,
+# que no la especifica): t=0.0->10Hz, t=0.5->469Hz, t=1.0->22000Hz. La
+# fórmula log fmin*(fmax/fmin)^t predice 469.04Hz en t=0.5 — coincide con
+# los 469Hz leídos en pantalla, confirma la curva.
+EQ8_FREQ_MIN_HZ = 10.0
+EQ8_FREQ_MAX_HZ = 22000.0
+
+FORMANTE_THROTTLE_HZ = 20  # mismo orden que PANEO_THROTTLE_HZ
+
+_FORMANTE_CODIGO = """\
+for _i in {tracks}:
+    _d = SONG.tracks[_i].devices[{device_index}]
+    for _p in {params_f1}:
+        _d.parameters[_p].value = {t1:.6f}
+    for _p in {params_f2}:
+        _d.parameters[_p].value = {t2:.6f}
+"""
+
+
+def hz_a_normalizado(hz):
+    """Hz -> 0.0-1.0 para el parámetro Frequency de EQ Eight, según la
+    curva calibrada en vivo (ver EQ8_FREQ_MIN_HZ/EQ8_FREQ_MAX_HZ)."""
+    hz = max(EQ8_FREQ_MIN_HZ, min(EQ8_FREQ_MAX_HZ, hz))
+    return math.log(hz / EQ8_FREQ_MIN_HZ) / math.log(EQ8_FREQ_MAX_HZ / EQ8_FREQ_MIN_HZ)
+
+
+def cargar_formantes(config_dir):
+    """Lee vocales_ramon.json junto a config.json (mismo formato que genera
+    voz_rumbos.py --calibrate: {"a": [F1, F2], ...}). Sin el archivo, usa
+    FORMANTES_DEFAULT (provisional, no la voz real de Ramón)."""
+    path = os.path.join(config_dir, "vocales_ramon.json")
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            d = json.load(f)
+        return {k: tuple(v) for k, v in d.items()}
+    return dict(FORMANTES_DEFAULT)
 
 
 def _lerp(actual, objetivo, coef):
@@ -99,9 +174,10 @@ def calcular_ganancias(angulo_deg, densidad):
     }
 
 
-def calcular_actualizacion(estado, address, args):
+def calcular_actualizacion(estado, address, args, formantes=None):
     """Pura (sin llamadas a TD): dado el estado y un mensaje entrante,
-    devuelve el estado nuevo. Testable fuera de TouchDesigner."""
+    devuelve el estado nuevo. Testable fuera de TouchDesigner. `formantes`
+    es el dict vocal->(F1, F2) (Fase F); sin pasarlo, ese campo no cambia."""
     nuevo = dict(estado)
     nuevo["energia"] = dict(estado["energia"])
 
@@ -120,10 +196,14 @@ def calcular_actualizacion(estado, address, args):
         # (clase, no rumbo) por un pendiente desde Fase D — ver
         # docs/OSC_SPEC.md. Con el rumbo real disponible de nuevo, vuelve
         # a leerse aquí.
-        _vocal, _clase, rumbo = args[0], args[1], args[2]
+        vocal, _clase, rumbo = args[0], args[1], args[2]
         for k in nuevo["energia"]:
             objetivo = 1.0 if k == rumbo else 0.0
             nuevo["energia"][k] = _lerp(nuevo["energia"][k], objetivo, LAG if k == rumbo else LAG * 0.4)
+        if formantes is not None:
+            # Sin clasificación (vocal == "") mantiene el último formante:
+            # el timbre no debe cortar a silencio entre frames sin vocal.
+            nuevo["formante"] = formantes.get(vocal, nuevo["formante"])
 
     elif address == "/telar/palabra":
         nuevo["fila"] = estado["fila"] + 1
@@ -177,8 +257,10 @@ def inicializar():
 
     me.store("rumbos_estado", dict(ESTADO_INICIAL))
     me.store("paneo_estado", dict(PANEO_INICIAL))
+    me.store("formantes", cargar_formantes(os.path.join(project.folder, "..")))
     me.store("ultimo_envio_ts", 0.0)
     me.store("paneo_ultimo_envio_ts", 0.0)
+    me.store("formante_ultimo_envio_ts", 0.0)
     me.store("silaba_activa", False)
 
 
@@ -220,7 +302,8 @@ def onReceiveOSC(dat, rowIndex, message, bytes, timeStamp, address, args, peer):
         me.store("paneo_estado", paneo)
 
     estado = me.fetch("rumbos_estado", dict(ESTADO_INICIAL))
-    me.store("rumbos_estado", calcular_actualizacion(estado, address, args))
+    formantes = me.fetch("formantes", dict(FORMANTES_DEFAULT))
+    me.store("rumbos_estado", calcular_actualizacion(estado, address, args, formantes))
     return
 
 
@@ -257,4 +340,13 @@ def tick():
         g = calcular_ganancias(angulo_final, paneo["densidad"])
         codigo = _PANEO_CODIGO.format(fl=g["FL"], fr=g["FR"], bl=g["BL"], br=g["BR"],
                                        tracks=tuple(TRACKS_FUENTE))
+        _enviar_ableton("/shell/runCode", [codigo])
+
+    if (FORMANTE_DEVICE_INDEX is not None and estado["formante"] is not None
+            and ahora - me.fetch("formante_ultimo_envio_ts", 0.0) >= (1.0 / FORMANTE_THROTTLE_HZ)):
+        me.store("formante_ultimo_envio_ts", ahora)
+        f1, f2 = estado["formante"]
+        codigo = _FORMANTE_CODIGO.format(tracks=tuple(TRACKS_FORMANTE), device_index=FORMANTE_DEVICE_INDEX,
+                                          params_f1=FORMANTE_PARAM_FREQ[1], params_f2=FORMANTE_PARAM_FREQ[2],
+                                          t1=hz_a_normalizado(f1), t2=hz_a_normalizado(f2))
         _enviar_ableton("/shell/runCode", [codigo])

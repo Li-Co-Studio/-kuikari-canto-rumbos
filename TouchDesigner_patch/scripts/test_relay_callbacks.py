@@ -128,6 +128,79 @@ def test_codigo_runcode_es_python_valido(m):
     print("OK: el código Python generado para /shell/runCode compila y trae los valores esperados")
 
 
+def test_tracks_formante_apunta_a_vital(m):
+    assert m.TRACKS_FORMANTE == [0, 1], f"esperaba 1-Vital/2-Vital (índices 0,1), dio {m.TRACKS_FORMANTE}"
+    print("OK: TRACKS_FORMANTE apunta a 1-Vital/2-Vital (índices 0 y 1)")
+
+
+def test_formante_device_index_confirmado(m):
+    assert m.FORMANTE_DEVICE_INDEX == 1, f"esperaba el EQ Eight en el índice 1 (después de Vital), dio {m.FORMANTE_DEVICE_INDEX}"
+    assert m.FORMANTE_PARAM_FREQ == {1: (6, 11), 2: (16, 21)}, m.FORMANTE_PARAM_FREQ
+    print("OK: FORMANTE_DEVICE_INDEX y FORMANTE_PARAM_FREQ confirmados en vivo contra el EQ Eight real")
+
+
+def test_formante_tick_no_crashea_con_device_confirmado(m):
+    m.inicializar()
+    m.onReceiveOSC(None, 0, "", 0, 0, "/voz/vocal", ["a", 0, 1], None)
+    m.absTime.seconds = 1.0
+    for _ in range(10):
+        m.tick()  # no debe lanzar excepción con FORMANTE_DEVICE_INDEX confirmado (ableton_activo sigue False en la prueba)
+        m.absTime.seconds += 0.1
+    print("OK: tick() no lanza excepción calculando/formateando el código de Fase F")
+
+
+def test_hz_a_normalizado_calibrado_en_vivo(m):
+    # Puntos medidos a mano contra el EQ Eight real (2026-08-26): 10Hz,
+    # 469Hz y 22000Hz en t=0.0/0.5/1.0. No es una fórmula de memoria.
+    assert abs(m.hz_a_normalizado(10.0) - 0.0) < 1e-6
+    assert abs(m.hz_a_normalizado(469.0) - 0.5) < 2e-3
+    assert abs(m.hz_a_normalizado(22000.0) - 1.0) < 1e-6
+    print("OK: hz_a_normalizado() reproduce los tres puntos calibrados en vivo (10/469/22000 Hz)")
+
+
+def test_formante_lookup_por_vocal(m):
+    # Directo contra calcular_actualizacion (pura) con una tabla explícita,
+    # sin pasar por inicializar()/vocales_ramon.json real — así la prueba no
+    # se rompe el día que Ramón calibre de verdad.
+    formantes = dict(m.FORMANTES_DEFAULT)
+    estado = dict(m.ESTADO_INICIAL); estado["energia"] = dict(estado["energia"])
+    for vocal, f1f2 in formantes.items():
+        estado = m.calcular_actualizacion(estado, "/voz/vocal", [vocal, 0, 0], formantes)
+        assert estado["formante"] == f1f2, f"vocal={vocal}: esperaba {f1f2}, dio {estado['formante']}"
+    print("OK: cada vocal actualiza el formante objetivo a su F1/F2 en la tabla dada")
+
+
+def test_formante_mantiene_ultimo_sin_clasificar(m):
+    formantes = dict(m.FORMANTES_DEFAULT)
+    estado = dict(m.ESTADO_INICIAL); estado["energia"] = dict(estado["energia"])
+    estado = m.calcular_actualizacion(estado, "/voz/vocal", ["u", 4, 4], formantes)
+    antes = estado["formante"]
+    assert antes == formantes["u"]
+    estado = m.calcular_actualizacion(estado, "/voz/vocal", ["", -1, -1], formantes)
+    despues = estado["formante"]
+    assert despues == antes, "sin clasificación, el formante no debería resetear a None ni cambiar"
+    print("OK: sin vocal clasificada, se mantiene el último formante en vez de cortar a silencio")
+
+
+def test_cargar_formantes_default_sin_archivo(m):
+    import tempfile
+    with tempfile.TemporaryDirectory() as vacio:
+        formantes = m.cargar_formantes(vacio)
+    assert formantes == m.FORMANTES_DEFAULT
+    print("OK: cargar_formantes() usa FORMANTES_DEFAULT cuando no existe vocales_ramon.json")
+
+
+def test_codigo_formante_es_python_valido(m):
+    t1 = m.hz_a_normalizado(700.0)
+    t2 = m.hz_a_normalizado(1300.0)
+    codigo = m._FORMANTE_CODIGO.format(tracks=tuple(m.TRACKS_FORMANTE), device_index=m.FORMANTE_DEVICE_INDEX,
+                                        params_f1=m.FORMANTE_PARAM_FREQ[1], params_f2=m.FORMANTE_PARAM_FREQ[2],
+                                        t1=t1, t2=t2)
+    compile(codigo, "<formante>", "exec")
+    assert f"{t1:.6f}" in codigo and "(6, 11)" in codigo and "(16, 21)" in codigo
+    print("OK: el código Python generado para el EQ Eight de Fase F compila y trae los valores esperados")
+
+
 if __name__ == "__main__":
     m = _cargar_modulo()
     test_ganancias_potencia_constante(m)
@@ -139,4 +212,12 @@ if __name__ == "__main__":
     test_densidad_decae_en_tick(m)
     test_tracks_fuente_solo_ramon(m)
     test_codigo_runcode_es_python_valido(m)
+    test_tracks_formante_apunta_a_vital(m)
+    test_formante_device_index_confirmado(m)
+    test_formante_tick_no_crashea_con_device_confirmado(m)
+    test_hz_a_normalizado_calibrado_en_vivo(m)
+    test_formante_lookup_por_vocal(m)
+    test_formante_mantiene_ultimo_sin_clasificar(m)
+    test_cargar_formantes_default_sin_archivo(m)
+    test_codigo_formante_es_python_valido(m)
     print("\nTODAS LAS PRUEBAS PASARON")
