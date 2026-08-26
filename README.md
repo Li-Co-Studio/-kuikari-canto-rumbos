@@ -57,9 +57,13 @@ python src/voz_rumbos_test.py
 python TouchDesigner_patch/scripts/test_relay_callbacks.py
 ```
 
+## Boceto sonoro
+
+Boceto sonoro del acorde (dos instancias de Vital): [`media/boceto_acorde_vital.wav`](media/boceto_acorde_vital.wav)
+
 ## Fuera de este repo
 
-Grabaciones de canto, corpus de terceros (`repos/`, con licencias
-propias — ver `docs/ATRIBUCION.md`), proyectos binarios de
-TouchDesigner (`.toe`) y configuración local con IPs de infraestructura
-no se versionan aquí. Ver `.gitignore`.
+Corpus de terceros (`repos/`, con licencias propias — ver
+`docs/ATRIBUCION.md`), proyectos binarios de TouchDesigner (`.toe`) y
+configuración local con IPs de infraestructura no se versionan aquí.
+Ver `.gitignore`.
