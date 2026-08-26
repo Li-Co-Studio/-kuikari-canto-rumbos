@@ -1,0 +1,34 @@
+# Terceros — código y corpus con licencia propia (GPLv3 / CC BY-NC-SA).
+# Citados con fuente en docs/ATRIBUCION.md, no se republican como propios.
+repos/
+
+# Grabaciones de canto y cualquier material derivado de audio real
+# (visualizaciones, resúmenes de análisis). Protocolo de contenido
+# sagrado del proyecto: si algún archivo específico debería salir de
+# aquí, se confirma con Hafo/Ramón antes de tocarlo, no se asume.
+data/
+out/
+
+# Proyectos binarios de TouchDesigner (no forman parte de la revisión de código)
+*.toe
+
+# Config local: hoy solo trae IPs placeholder, pero es donde llegarán las
+# IPs reales de Esteban/Carlos — se deja fuera del repo preventivamente.
+config.json
+config.local.json
+
+# Credenciales, tokens, entornos
+.env
+*.env
+*.key
+*.pem
+*token*
+*credential*
+
+# Cachés de Python
+__pycache__/
+*.pyc
+
+# Sistema
+.DS_Store
+Thumbs.db
