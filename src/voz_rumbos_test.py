@@ -55,10 +55,35 @@ def test_analyze_array_emite_clase_y_rumbo_juntos():
     print(f"OK: analyze_array() produce clase y rumbo consistentes juntos ({len(con_vocal)} frames con vocal)")
 
 
+def test_detectar_tomas_separa_por_silencio():
+    import numpy as np
+    sr = vr.SR
+    def tono(dur):
+        t = np.linspace(0, dur, int(sr * dur), endpoint=False)
+        return 0.4 * np.sin(2 * np.pi * 220 * t)
+    silencio = np.zeros(int(sr * 1.0))
+    y = np.concatenate([tono(1.0), silencio, tono(1.0), silencio, tono(1.0)]).astype(np.float32)
+    tomas = vr.detectar_tomas(y, sr)
+    assert len(tomas) == 3, tomas
+    print(f"OK: detectar_tomas() separa 3 tomas sintéticas por silencio: {tomas}")
+
+
+def test_detectar_tomas_sin_huecos_devuelve_una_toma():
+    import numpy as np
+    sr = vr.SR
+    t = np.linspace(0, 2.0, int(sr * 2.0), endpoint=False)
+    y = (0.4 * np.sin(2 * np.pi * 220 * t)).astype(np.float32)
+    tomas = vr.detectar_tomas(y, sr)
+    assert len(tomas) == 1, tomas
+    print(f"OK: detectar_tomas() sin huecos de silencio devuelve una sola toma: {tomas}")
+
+
 if __name__ == "__main__":
     test_clase_vocal_sin_cambios()
     test_default_rumbos_fijo_ix_centro()
     test_parse_rumbos_default_es_neutro()
     test_parse_rumbos_configurable_por_montaje()
     test_analyze_array_emite_clase_y_rumbo_juntos()
+    test_detectar_tomas_separa_por_silencio()
+    test_detectar_tomas_sin_huecos_devuelve_una_toma()
     print("\nTODAS LAS PRUEBAS PASARON")

@@ -1145,7 +1145,171 @@ no truena), avisar y se corre aparte.
 - (Se mantienen sin cambios: afinar Ganancia/Resonancia por oído —
   responsabilidad de Hafo/Ramón, no técnica —, decidir si otras tracks
   necesitan su propio EQ de formantes, IPs reales de Esteban/Carlos,
-  calibración de vocales de Ramón, decisión sobre renombrar
-  `voz_rumbos.py`, Fase A/C bloqueadas del lado de Hafo, prueba de
-  rendimiento larga del paneo, señal viva de B, asignación real de
-  `--rumbos`, consecuencia narrativa del rumbo restaurado.)
+  decisión sobre renombrar `voz_rumbos.py`, Fase C bloqueada del lado
+  de Hafo, prueba de rendimiento larga del paneo, señal viva de B,
+  asignación real de `--rumbos`, consecuencia narrativa del rumbo
+  restaurado. Calibración de vocales y Fase A: ver sección siguiente,
+  ya resueltas.)
+
+## Fase A — afinación real del xaweri + vocales reales de Ramón — 2026-09-07
+
+Pedido de Hafo: llegaron las grabaciones de calibración de vocales y del
+xaweri con arco (`E:\WIXA\Kuikarirec\Audio\Kuikari_Calibration`, 12
+archivos: 5 vocales de Ramón, 4 cuerdas al aire XEWI/UTA/AIKA/NAUKA, 3
+tonadas/pasajes). El kanari (guitarra, técnica de pulsado) no llegó
+todavía — se procesa aparte cuando llegue, no bloqueó esta fase.
+
+**Organización:** copiados (no movidos, los originales quedan intactos
+en E:) a `data/calibracion/voz/` y `data/calibracion/xaweri/` dentro del
+repo.
+
+**Corrección durante esta misma sesión — se pasó por alto la estructura
+real de los archivos.** El primer pase midió cada wav completo de un
+golpe y reportó un solo F1/F2 (o un solo Hz) por archivo. Hafo señaló
+que los 12 archivos en realidad traen **tres tomas cada uno**, separadas
+por silencio (~1-2s) — algo que un promedio ciego sobre el archivo
+completo esconde en vez de revelar, y que además se estaba promediando
+sin filtrar por energía en `cmd_calibrate()` (a diferencia de
+`analyze_array()`, que sí exige `rms > 0.01`), así que los huecos de
+silencio entre tomas también podían meter ruido al cálculo. Se corrigió
+de raíz: `detectar_tomas()` (nuevo, en `voz_rumbos.py`, compartido con
+`afinacion_wixa.py`) segmenta cada archivo por silencio real (RMS +
+gap mínimo), se mide cada toma por separado con compuerta de energía, y
+si las tomas no concuerdan entre sí se **avisa en vez de promediar la
+discrepancia**. Pruebas nuevas cubriendo ambos casos (tomas consistentes
+e inconsistentes) en `voz_rumbos_test.py` y `afinacion_wixa_test.py`.
+
+**Vocales — `vocales_ramon.json` real:** `voz_rumbos.py --calibrate`
+(reescrito con detección de tomas) sobre los 5 wavs reales. Escribe en
+la raíz del repo, no en `data/calibracion/` como decía
+`SETUP_CANTO_RUMBOS.md` — esa ruta quedó desactualizada frente a lo que
+ya leen `relay_callbacks.py`/`analisis_canto.py` en la práctica.
+Resultado (F1/F2 en Hz, medianas de las 3 tomas):
+
+| vocal | F1 | F2 | dispersión F2 entre tomas |
+|---|---|---|---|
+| a | 769 | 1380 | 26Hz |
+| e | 563 | 1220 | **230Hz — AVISO** |
+| i | 441 | 2014 | **653Hz — AVISO** |
+| ɨ ('+') | 424 | 1477 | **184Hz — AVISO** |
+| u | 325 | 665 | 4Hz |
+
+'a' y 'u' son sólidas. 'e', 'i' y ɨ tienen tomas que no concuerdan entre
+sí — el script ya no lo esconde, lo marca. Puede ser variación real de
+articulación entre tomas (Ramón dijo la vocal distinto cada vez) o
+error de estimación LPC en alguna toma puntual; no se puede distinguir
+sin escuchar. El JSON usa la mediana de las 3 tomas de cualquier forma
+(sigue siendo el mejor estimador puntual disponible), pero el número
+crudo ya no se presenta como si fuera sólido cuando no lo es.
+
+**Xaweri — `afinacion_wixa.py` (Fase A, nuevo) y `afinacion_ramon.json`
+real:** mismo motor de f0 (`librosa.pyin`) y misma corrección de tomas.
+Mide cuerdas al aire (mediana de f0 por toma, con aviso si no
+concuerdan) y pasajes (rango 5-95 percentil + histograma de grados por
+semitono + grado dominante por toma, para que la discrepancia también
+sea visible ahí). Etiqueta de cada cuerda sale del propio nombre de
+archivo (`..._XEWI.wav` → `XEWI`).
+
+Resultado por toma (Hz), primer pase con mediana de toda la ventana
+delimitada por silencio:
+
+| cuerda | toma 1 | toma 2 | toma 3 | ¿consistente? |
+|---|---|---|---|---|
+| XEWI | 958.9 | 958.9 | 964.5 | sí |
+| UTA | 160.0 | 629.0 | 213.6 | **no — AVISO** |
+| AIKA | 159.1 | 159.1 | 159.1 | sí |
+| NAUKA | 643.7 | 643.7 | 321.9 | **no — AVISO** |
+
+Este resultado se corrigió en la sesión siguiente (ver más abajo) — el
+diagnóstico de "cruzado y confirmado contra las tonadas" que se escribió
+aquí originalmente fue real (las tonadas sí tocan cerca de esas alturas)
+pero incompleto: no alcanzaba para explicar la dispersión.
+
+## Fase A, corrección — arco corto del xaweri, no "ruido difuso" — 2026-09-07 (cont.)
+
+Hafo escuchó las grabaciones e hizo una corrección de campo importante:
+**el arco del xaweri no sostiene una nota limpia más de 2 a 3 segundos**,
+no los 4 a 6 que se había pedido grabar. Su hipótesis: el análisis
+estaba leyendo más allá del tramo limpio hacia ruido de arco o silencio,
+y que las tres tomas de UTA deberían coincidir si el análisis se
+limitaba a los primeros 2-3 segundos de cada toma.
+
+**Diagnóstico cuadro por cuadro (antes de aplicar ningún corte a
+ciegas):** se imprimió f0 por frame dentro de cada toma de las 4
+cuerdas. Hallazgo más preciso que "ruido difuso": varias tomas traen
+**dos eventos de arco distintos pegados** — una nota, una pausa breve de
+rearticulación (~0.1s) cuya energía NO baja lo suficiente para que
+`detectar_tomas()` la lea como silencio *entre* tomas (ese umbral separa
+tomas, no eventos dentro de una toma), y luego otra nota, a veces en un
+registro completamente distinto. No es degradación gradual del arco
+hacia ruido — son dos notas reales, la segunda tan "limpia" como la
+primera.
+
+**Método corregido (general, no un parche de UTA):** `runs_estables()`
+(nuevo, en `afinacion_wixa.py`) segmenta el f0 de una toma en tramos de
+altura estable, cortando en cada hueco de voz/energía o salto de altura
+mayor al 5%. `medir_cuerda()` ahora usa **el tramo más largo dentro de
+cada toma**, no toda la ventana ni tampoco "los primeros N segundos" a
+secas (un corte fijo no distingue tramo real de arranque espurio). Si
+los dos tramos más largos de una toma duran casi lo mismo, se marca
+`"ambigua": true` en vez de reportar el resultado con la misma confianza
+que una toma sin empate. Soporte nuevo para excluir una toma específica
+por decisión humana (`--excluir-toma ETIQUETA:N`), documentado en el
+resultado como exclusión por ejecución, no por hallazgo algorítmico.
+Pruebas nuevas: separación de dos eventos dentro de una toma, selección
+del tramo más largo, marca de ambigüedad, exclusión explícita
+(`afinacion_wixa_test.py`, 13/13 pasando).
+
+**Resultado con el método corregido:**
+
+| cuerda | toma 1 | toma 2 | toma 3 | resultado |
+|---|---|---|---|---|
+| XEWI | 958.9 | 958.9 | 964.5 | **958.9Hz, confirmada** — no fue suerte: en las 3 tomas el tramo dominante (>1s) cae ahí; solo hay transitorios de ataque de <0.1s antes, ya descartados por duración mínima |
+| AIKA | 159.1 | 159.1 | 159.1 | **159.1Hz, confirmada** — igual que XEWI, ningún cambio con el método nuevo |
+| NAUKA | 320→**643.7** | 621.8–643.7 | *(excluida)* | **643.7Hz**, tomas 1-2. Toma 3 excluida con `--excluir-toma NAUKA:3` — Hafo confirmó por oído que la nota está mal ejecutada en el instrumento, no es un problema de medición |
+| UTA | 160.0 | **AMBIGUA**: 643.7(0.70s) vs 160.0(0.66s) | 213.6(0.87s) vs 320.0(0.49s) → 213.6 | **sigue sin resolver** |
+
+XEWI y AIKA quedan confirmadas por el método corregido, no por
+casualidad — el tramo dominante de cada una de sus 3 tomas es
+consistente entre sí bien por encima del margen de ambigüedad. NAUKA
+queda resuelta exactamente como Hafo indicó: 643.7Hz de las tomas 1 y 2,
+toma 3 excluida y documentada como ejecución incorrecta, no como
+hallazgo del algoritmo.
+
+**UTA no se resolvió con la corrección del arco**, al contrario de lo
+que se esperaba. Toma 1 da 160.0Hz limpio (única nota, sin ambigüedad).
+Toma 3 da un tramo dominante de 213.6Hz sostenido 0.87s — no es un
+transitorio de arco, es una nota completa y estable, pero a otra altura
+que toma 1 (213.6/160.0 ≈ una cuarta justa, no un error de octava).
+Toma 2 es la más problemática: sus dos eventos duran casi lo mismo
+(0.70s a 643.7Hz vs 0.66s a 160.0Hz) — "usar el más largo" ahí es casi
+una moneda al aire, por eso el método ahora lo marca `"ambigua"` en vez
+de reportarlo con falsa confianza. En resumen: la corrección del arco
+corto sí explica la nota espuria que aparecía DESPUÉS de la nota
+correcta en varias tomas, pero **no explica por qué la propia nota
+"limpia" de toma 3 (213.6Hz) no coincide con la de toma 1 (160.0Hz)** —
+esto sigue necesitando que alguien escuche las 3 tomas de UTA
+específicamente (no solo confirmar el límite general del arco) para
+decidir cuál nota es la cuerda real.
+
+**Referencia para grabaciones futuras del xaweri:** el arco de este
+instrumento sostiene una nota limpia **2 a 3 segundos como máximo**, no
+4-6. Pedir tomas de esa duración (o más cortas) evita capturar una
+segunda nota de rearticulación pegada a la primera dentro del mismo
+silencio-a-silencio.
+
+### Pendiente
+
+- **Escucha de confirmación necesaria** de las 3 tomas de UTA
+  específicamente — la corrección del arco corto no las hizo coincidir;
+  falta decidir cuál (160.0Hz, 213.6Hz, o algo distinto en la toma
+  ambigua) es la cuerda real.
+- Escucha de 'e'/'i'/ɨ si Hafo quiere resolver su dispersión de F2 antes
+  de usarlas en Fase B — investigación en curso, en paralelo, sin
+  relación con el hallazgo del arco (ver abajo).
+- Kanari: se procesa cuando lleguen sus grabaciones (técnica de
+  pulsado, no arco — respeta duraciones distintas de las del xaweri, no
+  se asume igual).
+- `afinacion_ramon.json` y `vocales_ramon.json` no se usan todavía en
+  ningún consumidor de Fase B (`armonia_wixa.py`, sin construir) — por
+  ahora son insumo medido, disponible para cuando se arranque esa fase.

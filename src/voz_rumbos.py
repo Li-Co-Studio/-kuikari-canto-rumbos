@@ -284,21 +284,71 @@ def cmd_file(path, centroids, rumbos, osc):
     print(f"   sílabas detectadas: {sil} | vocales: {Counter(voc).most_common()}")
 
 
+def detectar_tomas(y, sr, umbral_rms=0.02, min_silencio=0.5, min_toma=0.15, frame=2048, hop=512):
+    """Detecta tomas separadas por silencio dentro de un mismo archivo
+    (grabaciones con varias repeticiones seguidas). Devuelve lista de
+    (t0, t1) en segundos; si no hay huecos de silencio, devuelve el
+    archivo completo como una sola toma."""
+    import librosa
+    rms = librosa.feature.rms(y=y, frame_length=frame, hop_length=hop)[0]
+    con_voz = rms > umbral_rms
+    bloques, i, n = [], 0, len(con_voz)
+    while i < n:
+        if con_voz[i]:
+            j = i
+            while j < n and con_voz[j]:
+                j += 1
+            bloques.append([i, j])
+            i = j
+        else:
+            i += 1
+    min_sil_fr = int(min_silencio * sr / hop)
+    fusion = []
+    for b in bloques:
+        if fusion and b[0] - fusion[-1][1] < min_sil_fr:
+            fusion[-1][1] = b[1]
+        else:
+            fusion.append(b)
+    min_toma_fr = int(min_toma * sr / hop)
+    fusion = [b for b in fusion if b[1] - b[0] >= min_toma_fr]
+    if not fusion:
+        return [(0.0, len(y) / sr)]
+    return [(round(a * hop / sr, 3), round(b * hop / sr, 3)) for a, b in fusion]
+
+
 def cmd_calibrate(paths):
+    """Por archivo: detecta tomas separadas por silencio, mide F1/F2 por
+    toma (gateado por energía — antes se promediaba también el silencio
+    entre tomas), y avisa si las tomas no concuerdan entre sí en vez de
+    promediar la discrepancia en silencio."""
     import librosa
     order = ["a", "e", "i", "+", "u"]
     out = {}
     for v, p in zip(order, paths):
         y, sr = librosa.load(p, sr=SR, mono=True)
-        f1s, f2s = [], []
-        for s in range(0, len(y) - FRAME, HOP * 4):
-            fs = lpc_formants(y[s:s + FRAME], sr)
-            if fs and len(fs) >= 2 and fs[0] < 1100:
-                f1s.append(fs[0]); f2s.append(fs[1])
-        if not f1s:
+        rms_full = librosa.feature.rms(y=y, frame_length=FRAME, hop_length=HOP)[0]
+        tomas = detectar_tomas(y, sr)
+        por_toma = []
+        for (t0, t1) in tomas:
+            s0, s1 = int(t0 * sr), int(t1 * sr)
+            f1s, f2s = [], []
+            for s in range(s0, max(s0, s1 - FRAME), HOP * 4):
+                i_rms = s // HOP
+                if i_rms < len(rms_full) and rms_full[i_rms] < 0.01:
+                    continue
+                fs = lpc_formants(y[s:s + FRAME], sr)
+                if fs and len(fs) >= 2 and fs[0] < 1100:
+                    f1s.append(fs[0]); f2s.append(fs[1])
+            if f1s:
+                por_toma.append((float(np.median(f1s)), float(np.median(f2s))))
+        if not por_toma:
             print(f"!! {p}: sin frames útiles"); continue
-        out[v] = [float(np.median(f1s)), float(np.median(f2s))]
-        print(f"  {v}: F1={out[v][0]:.0f} F2={out[v][1]:.0f}  ({p})")
+        f1_meds = [t[0] for t in por_toma]; f2_meds = [t[1] for t in por_toma]
+        out[v] = [float(np.median(f1_meds)), float(np.median(f2_meds))]
+        detalle = "  |  ".join(f"toma{i + 1} F1={t[0]:.0f} F2={t[1]:.0f}" for i, t in enumerate(por_toma))
+        disp2 = (max(f2_meds) - min(f2_meds)) if len(f2_meds) > 1 else 0.0
+        aviso = f"  [AVISO: dispersión F2 entre tomas {disp2:.0f}Hz — revisar por oído]" if disp2 > 150 else ""
+        print(f"  {v}: F1={out[v][0]:.0f} F2={out[v][1]:.0f}  ({len(por_toma)} tomas: {detalle}){aviso}")
     with open("vocales_ramon.json", "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=2)
     print("→ vocales_ramon.json (Ramón puede regrabar y recalibrar cuando quiera)")
