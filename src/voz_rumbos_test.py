@@ -55,6 +55,24 @@ def test_analyze_array_emite_clase_y_rumbo_juntos():
     print(f"OK: analyze_array() produce clase y rumbo consistentes juntos ({len(con_vocal)} frames con vocal)")
 
 
+def test_ancho_banda_hz_distingue_polo_real_de_espurio():
+    """Reproduce numéricamente el hallazgo real: un polo LPC cerca del
+    borde del círculo unitario (radio alto) es un formante angosto y
+    real; uno más adentro (radio bajo) es ancho — el tipo de polo
+    espurio que se colaba como F2 falso en 'i'/'e' (ancho de banda medido
+    en la grabación real: 1000-2500Hz)."""
+    import numpy as np
+    sr = vr.SR
+    angulo = 2 * np.pi * 2400 / sr  # ~2400Hz, frecuencia típica de F2
+    polo_real = 0.995 * np.exp(1j * angulo)      # radio alto → angosto
+    polo_espurio = 0.85 * np.exp(1j * angulo)    # radio bajo → ancho
+    bw_real = vr.ancho_banda_hz(polo_real, sr)
+    bw_espurio = vr.ancho_banda_hz(polo_espurio, sr)
+    assert bw_real < 200, bw_real
+    assert bw_espurio > 1000, bw_espurio
+    print(f"OK: ancho_banda_hz() separa polo real ({bw_real:.0f}Hz) de espurio ({bw_espurio:.0f}Hz)")
+
+
 def test_detectar_tomas_separa_por_silencio():
     import numpy as np
     sr = vr.SR
@@ -84,6 +102,7 @@ if __name__ == "__main__":
     test_parse_rumbos_default_es_neutro()
     test_parse_rumbos_configurable_por_montaje()
     test_analyze_array_emite_clase_y_rumbo_juntos()
+    test_ancho_banda_hz_distingue_polo_real_de_espurio()
     test_detectar_tomas_separa_por_silencio()
     test_detectar_tomas_sin_huecos_devuelve_una_toma()
     print("\nTODAS LAS PRUEBAS PASARON")

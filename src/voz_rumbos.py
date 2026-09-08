@@ -103,8 +103,29 @@ def parse_rumbos(vals):
     return {"a": a, "e": e, "i": i, "u": u, "+": 0}
 
 
+LPC_BW_MAX_HZ = 500.0  # ancho de banda máximo para aceptar un polo como formante real
+
+
+def ancho_banda_hz(root, sr):
+    """Ancho de banda (Hz) del polo LPC dado su radio en el círculo
+    unitario. Un formante real de voz mide ~30-300Hz; un polo espurio del
+    LPC (armónico de tono modelado como resonancia, artefacto numérico
+    de orden alto) suele salir con cientos o miles de Hz de ancho —
+    señal de que no es una resonancia real del tracto vocal, aunque su
+    frecuencia caiga dentro del rango esperado de formantes."""
+    return -(sr / np.pi) * np.log(np.abs(root))
+
+
 def lpc_formants(frame, sr, n_formants=2):
-    """F1..Fn por LPC. frame: audio mono ya ventaneado."""
+    """F1..Fn por LPC. frame: audio mono ya ventaneado.
+
+    Hallazgo (Fase A, investigación paralela de dispersión en e/i/ɨ): con
+    order alto (2 + sr//1000 ≈ 24 para 22050Hz) aparece con frecuencia un
+    polo espurio de ancho de banda enorme (verificado: 1000-2500Hz) entre
+    el F1 real y el F2 real, que antes se colaba como "F2" por ser el
+    segundo candidato más grave — empujando al F2 verdadero al tercer
+    lugar, descartado. Filtrar también por ancho de banda (no solo por
+    frecuencia) lo excluye."""
     frame = frame * np.hamming(len(frame))
     frame = np.append(frame[0], frame[1:] - 0.97 * frame[:-1])  # pre-énfasis
     order = 2 + sr // 1000
@@ -114,8 +135,12 @@ def lpc_formants(frame, sr, n_formants=2):
     except Exception:
         return None
     roots = [r for r in np.roots(a) if np.imag(r) > 0.01]
-    freqs = sorted(np.angle(roots) * (sr / (2 * np.pi)))
-    freqs = [f for f in freqs if 90 < f < 4000]
+    candidatos = []
+    for r in roots:
+        f = np.angle(r) * (sr / (2 * np.pi))
+        if 90 < f < 4000 and ancho_banda_hz(r, sr) < LPC_BW_MAX_HZ:
+            candidatos.append(f)
+    freqs = sorted(candidatos)
     return freqs[:n_formants] if len(freqs) >= n_formants else None
 
 

@@ -1304,12 +1304,69 @@ silencio-a-silencio.
   específicamente — la corrección del arco corto no las hizo coincidir;
   falta decidir cuál (160.0Hz, 213.6Hz, o algo distinto en la toma
   ambigua) es la cuerda real.
-- Escucha de 'e'/'i'/ɨ si Hafo quiere resolver su dispersión de F2 antes
-  de usarlas en Fase B — investigación en curso, en paralelo, sin
-  relación con el hallazgo del arco (ver abajo).
 - Kanari: se procesa cuando lleguen sus grabaciones (técnica de
   pulsado, no arco — respeta duraciones distintas de las del xaweri, no
   se asume igual).
 - `afinacion_ramon.json` y `vocales_ramon.json` no se usan todavía en
   ningún consumidor de Fase B (`armonia_wixa.py`, sin construir) — por
   ahora son insumo medido, disponible para cuando se arranque esa fase.
+
+## Fase A, investigación paralela — F2 espurio en la extracción LPC (e/i/ɨ) — 2026-09-07 (cont.)
+
+En paralelo a lo del arco del xaweri (sin relación entre ambos
+hallazgos, ni bloqueo mutuo): se revisó por qué 'e', 'i' y ɨ tenían
+dispersión de F2 entre tomas mientras 'a' y 'u' no.
+
+**Diagnóstico:** se imprimieron todos los candidatos de `lpc_formants()`
+por cuadro (no solo los 2 que devuelve la función), y su ancho de banda
+(`bw = -(sr/π)·ln|polo|`, la métrica estándar para distinguir un polo
+LPC real de uno espurio). Hallazgo confirmado con números, no
+intuición: con el orden de LPC usado (≈24 para 22050Hz), aparece con
+frecuencia un polo espurio de **ancho de banda 1000-2500Hz** justo entre
+el F1 real y el F2 real de 'i'/'e' — un formante real de voz mide
+30-300Hz de ancho, así que ese polo no es una resonancia del tracto
+vocal, es un artefacto numérico del LPC de orden alto (probablemente
+relacionado con armónicos de tono modelados como si fueran una
+resonancia). Como `lpc_formants()` solo tomaba los 2 candidatos de menor
+frecuencia sin mirar su ancho de banda, ese espurio se colaba como "F2"
+y el F2 real (ancho de banda 67-151Hz, consistente) quedaba en tercer
+lugar, descartado.
+
+**Corrección:** `lpc_formants()` en `voz_rumbos.py` ahora filtra
+también por ancho de banda (`ancho_banda_hz()`, nuevo, `< 500Hz`) antes
+de tomar los candidatos más graves. Prueba nueva
+(`test_ancho_banda_hz_distingue_polo_real_de_espurio`) verifica la
+fórmula sobre polos sintéticos de radio conocido. Esta función la usan
+tanto `cmd_calibrate()` como `analyze_array()` (el motor en vivo de
+Fase F) — la corrección alcanza a las dos rutas, no solo a la
+calibración.
+
+**Resultado, recalibrando con el mismo audio real (F1/F2 en Hz,
+dispersión F2 entre tomas):**
+
+| vocal | antes | después | dispersión antes | dispersión después |
+|---|---|---|---|---|
+| a | 769/1380 | 769/1392 | 26Hz | 26Hz (sin cambio, ya estaba bien) |
+| e | 563/1220 | 564/2013 | **230Hz — AVISO** | 57Hz — resuelto |
+| i | 441/2014 | 441/2367 | **653Hz — AVISO** | **217Hz — sigue con AVISO, mejoró** |
+| ɨ ('+') | 424/1477 | 424/1554 | **184Hz — AVISO** | 84Hz — resuelto |
+| u | 325/665 | 325/665 | 4Hz | 4Hz (sin cambio, ya estaba bien) |
+
+'e' y ɨ quedan resueltas — la dispersión SÍ era el polo espurio, no
+variación real de Ramón. 'i' mejoró bastante (653→217Hz) pero sigue por
+encima del umbral de aviso; puede que le quede algo de dispersión real
+o un segundo modo de fallo distinto, no completamente diagnosticado
+todavía. El F2 de 'e' e 'i' también subió bastante frente al primer
+pase (1220→2013, 2014→2367) — es de esperarse: antes se estaba
+promediando el espurio (más grave) junto con el real, así que el número
+"antes" no era solo ruidoso, estaba sesgado hacia abajo.
+
+### Pendiente
+
+- 'i' sigue con dispersión de F2 por encima del umbral (217Hz) —
+  investigar más si Hafo quiere cerrarlo del todo antes de Fase B, o
+  aceptarlo si el rango calibrado sigue clasificando bien en la práctica
+  (ver `voz_rumbos_test.py`/verificación en vivo de Fase F).
+- Revisar si `LPC_BW_MAX_HZ = 500` es el umbral correcto para otras
+  voces/instrumentos, o si es específico de esta grabación — por ahora
+  no se ha probado con nadie más que Ramón.
