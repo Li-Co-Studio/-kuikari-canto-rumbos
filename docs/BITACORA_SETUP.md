@@ -1402,10 +1402,61 @@ promediando el espurio (más grave) junto con el real, así que el número
 
 ### Pendiente
 
-- 'i' sigue con dispersión de F2 por encima del umbral (217Hz) —
-  investigar más si Hafo quiere cerrarlo del todo antes de Fase B, o
-  aceptarlo si el rango calibrado sigue clasificando bien en la práctica
-  (ver `voz_rumbos_test.py`/verificación en vivo de Fase F).
+- Revisar si `LPC_BW_MAX_HZ = 500` es el umbral correcto para otras
+  voces/instrumentos, o si es específico de esta grabación — por ahora
+  no se ha probado con nadie más que Ramón.
+
+## Fase A, cierre de 'i' — dispersión real, no bug — 2026-10-03
+
+Pedido de Hafo: cerrar la dispersión de F2 de 'i' (217Hz, por encima del
+umbral de aviso) que quedó pendiente de la investigación del polo
+espurio.
+
+**Diagnóstico:** se revisó la distribución completa de F2 dentro de
+cada toma (no solo la mediana), con el filtro de ancho de banda ya
+aplicado. A diferencia de 'e' (que tenía un pico espurio bimodal
+contaminando la mediana), 'i' **no muestra ningún patrón bimodal ni
+candidato espurio** — cada toma es internamente angosta y consistente:
+
+| toma | F1 mediana | F2 mediana | F2 rango (10-90 percentil) |
+|---|---|---|---|
+| 1 | 441 | 2320 | 2298-2493 |
+| 2 | 449 | 2365 | 2328-2445 |
+| 3 | 439 | 2535 | 2421-2584 |
+
+F1 es prácticamente idéntico entre las 3 tomas (439-449, <2% de
+variación) — si hubiera un problema de medición de la misma naturaleza
+que el polo espurio, se esperaría ver algo irregular ahí también. Lo
+que hay es una deriva suave de F2 entre tomas (2320→2365→2535), cada
+toma apretada alrededor de su propio valor, sin saltos ni mezcla de dos
+poblaciones de frecuencia dentro de una misma toma.
+
+**Conclusión:** esto no es el mismo tipo de falla que 'e' ni que UTA —
+es variación articulatoria real entre repeticiones (F2 es más sensible
+que F1 a cambios finos de posición de lengua en vocales cerradas
+anteriores como 'i', así que más variación en F2 que en F1 entre tomas
+es fisiológicamente esperable, no una señal de error). No hay ningún
+ajuste de código que "arregle" esto sin inventar un recorte arbitrario
+sobre datos limpios — se cierra aceptando el valor calibrado actual
+(F1=441, F2=2367, mediana de las 3 tomas) como la mejor estimación
+puntual disponible, con el aviso de dispersión en el código quedando
+correcto y útil (sigue marcando variación real, no ruido, que es
+justamente para lo que está).
+
+Con esto, **Fase A queda cerrada por completo**: las 5 vocales de
+Ramón y las 4 cuerdas del xaweri, cada hallazgo de dispersión
+investigado hasta una causa raíz concreta (polo espurio en 'e'/ɨ,
+variación articulatoria real en 'i', arco corto + error de ejecución en
+NAUKA, error de medición en UTA), no aceptado ni descartado a ciegas.
+
+### Pendiente
+
+- Kanari: se procesa cuando lleguen sus grabaciones (técnica de
+  pulsado, no arco — respeta duraciones distintas de las del xaweri, no
+  se asume igual).
+- `afinacion_ramon.json` y `vocales_ramon.json` no se usan todavía en
+  ningún consumidor de Fase B (`armonia_wixa.py`, sin construir) — por
+  ahora son insumo medido, disponible para cuando se arranque esa fase.
 - Revisar si `LPC_BW_MAX_HZ = 500` es el umbral correcto para otras
   voces/instrumentos, o si es específico de esta grabación — por ahora
   no se ha probado con nadie más que Ramón.
