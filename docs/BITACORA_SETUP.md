@@ -1311,6 +1311,45 @@ silencio-a-silencio.
   ningún consumidor de Fase B (`armonia_wixa.py`, sin construir) — por
   ahora son insumo medido, disponible para cuando se arranque esa fase.
 
+## Fase A, cierre de UTA — confirmado por oído, 2026-10-03
+
+Hafo escuchó las 3 tomas de UTA directo (pendiente de la sección
+anterior). Confirmación: **las 3 tomas son la misma nota, ~213.6Hz
+(G♯3)** — no son ejecuciones distintas. Esto aclara algo que el
+análisis por sí solo no podía resolver:
+
+- Toma 3 (213.6Hz, limpia) ya tenía la lectura correcta.
+- Toma 1 (160.0Hz, única lectura) y la mitad "corta" de la toma 2
+  (160.0Hz) **no son un error de Ramón ni una segunda nota real** — son
+  el algoritmo leyendo mal esas dos tomas específicamente. A diferencia
+  de NAUKA (donde la toma 3 SÍ fue una ejecución incorrecta confirmada
+  por oído), aquí la ejecución fue correcta las 3 veces; lo que falló
+  fue la medición en 2 de 3 tomas. Vale la pena notar que 643.7Hz (la
+  otra mitad de la toma 2) es ≈3×213.6Hz — compatible con el tercer
+  armónico de la misma cuerda, no con otra nota.
+- Recalibrado con `--excluir-toma NAUKA:3 UTA:1 UTA:2`: **UTA queda en
+  213.6Hz**, usando solo la toma 3 (la única con lectura limpia y
+  confirmada). El mecanismo de exclusión es el mismo que para NAUKA,
+  pero la razón documentada es distinta — aquí se excluye por
+  limitación de la medición, no por ejecución incorrecta.
+
+Con esto, **Fase A del xaweri queda cerrada**: XEWI 958.9Hz, UTA
+213.6Hz, AIKA 159.1Hz, NAUKA 643.7Hz — las 4 cuerdas confirmadas, cada
+una con su justificación documentada en el JSON (`afinacion_ramon.json`,
+`detalle_tomas` por cuerda).
+
+### Pendiente
+
+- 'i' sigue con dispersión de F2 por encima del umbral (217Hz, ver
+  sección paralela abajo) — es lo único que falta para cerrar Fase A
+  del todo.
+- Kanari: se procesa cuando lleguen sus grabaciones (técnica de
+  pulsado, no arco — respeta duraciones distintas de las del xaweri, no
+  se asume igual).
+- `afinacion_ramon.json` y `vocales_ramon.json` no se usan todavía en
+  ningún consumidor de Fase B (`armonia_wixa.py`, sin construir) — por
+  ahora son insumo medido, disponible para cuando se arranque esa fase.
+
 ## Fase A, investigación paralela — F2 espurio en la extracción LPC (e/i/ɨ) — 2026-09-07 (cont.)
 
 En paralelo a lo del arco del xaweri (sin relación entre ambos

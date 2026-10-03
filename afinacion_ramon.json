@@ -86,14 +86,12 @@
       "midi": 56.48682057635243,
       "nota": "G♯3",
       "duracion_seg": 9.41,
-      "n_tomas_usadas": 3,
+      "n_tomas_usadas": 1,
       "hz_por_toma": [
-        160.0,
-        643.7,
         213.6
       ],
-      "dispersion_hz": 483.7,
-      "consistente": false,
+      "dispersion_hz": 0.0,
+      "consistente": true,
       "detalle_tomas": [
         {
           "toma": 1,
@@ -106,7 +104,7 @@
               "n": 117
             }
           ],
-          "excluida": false,
+          "excluida": true,
           "ambigua": false
         },
         {
@@ -127,7 +125,7 @@
               "n": 57
             }
           ],
-          "excluida": false,
+          "excluida": true,
           "ambigua": true
         },
         {
