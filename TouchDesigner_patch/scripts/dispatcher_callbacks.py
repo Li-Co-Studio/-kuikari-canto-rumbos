@@ -4,6 +4,6 @@
 # bind del puerto UDP. Ver MONTAJE.md.
 
 def onReceiveOSC(dat, rowIndex, message, bytes, timeStamp, address, args, peer):
-    op('/telar_visual/callbacks').module.onReceiveOSC(dat, rowIndex, message, bytes, timeStamp, address, args, peer)
-    op('/relay/callbacks').module.onReceiveOSC(dat, rowIndex, message, bytes, timeStamp, address, args, peer)
+    op('/project1/telar_visual/callbacks').module.onReceiveOSC(dat, rowIndex, message, bytes, timeStamp, address, args, peer)
+    op('/project1/relay/callbacks').module.onReceiveOSC(dat, rowIndex, message, bytes, timeStamp, address, args, peer)
     return
